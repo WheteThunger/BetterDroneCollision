@@ -12,7 +12,7 @@ using UnityEngine;
 namespace Oxide.Plugins
 {
     [Info("Better Drone Collision", "WhiteThunder", "1.0.0")]
-    [Description("Overhauls drone collision damage.")]
+    [Description("Overhauls drone collision damage so it's more intuitive.")]
     internal class BetterDroneCollision : CovalencePlugin
     {
         #region Fields
