@@ -140,6 +140,10 @@ namespace Oxide.Plugins
                 if (magnitude < _pluginConfig.MinCollisionVelocity)
                     return;
 
+                // Avoid damage when landing.
+                if (Vector3.Dot(collision.relativeVelocity.normalized, baseEntity.transform.up) > 0.5f)
+                    return;
+
                 var damage = magnitude * _pluginConfig.CollisionDamageMultiplier;
 
                 // If DroneSettings is not loaded, it's probably safe to assume that drones are using default protection properties.

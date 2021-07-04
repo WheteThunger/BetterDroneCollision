@@ -1,6 +1,7 @@
 ## Features
 
 - Overhauls drone collision damage so it's less extreme
+- Avoids collision damage when landing the drone
 
 ## Configuration
 
