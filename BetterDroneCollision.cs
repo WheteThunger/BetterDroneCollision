@@ -2,22 +2,28 @@
 using Newtonsoft.Json.Linq;
 using Newtonsoft.Json.Serialization;
 using Oxide.Core;
+using Oxide.Core.Plugins;
 using Rust;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("Better Drone Collision", "WhiteThunder", "0.1.0")]
+    [Info("Better Drone Collision", "WhiteThunder", "1.0.0")]
     [Description("Overhauls drone collision damage.")]
     internal class BetterDroneCollision : CovalencePlugin
     {
         #region Fields
 
+        [PluginReference]
+        private Plugin DroneSettings;
+
+        private static BetterDroneCollision _pluginInstance;
         private static Configuration _pluginConfig;
 
-        private const float ReplacementHurtVelocityThreshold = 1000;
+        private const float ReplacementHurtVelocityThreshold = float.MaxValue;
 
         private float? _vanillaHurtVelocityThreshold;
 
@@ -27,6 +33,8 @@ namespace Oxide.Plugins
 
         private void Init()
         {
+            _pluginInstance = this;
+
             Unsubscribe(nameof(OnEntitySpawned));
         }
 
@@ -56,6 +64,7 @@ namespace Oxide.Plugins
             }
 
             _pluginConfig = null;
+            _pluginInstance = null;
         }
 
         private void OnEntitySpawned(Drone drone)
@@ -104,8 +113,6 @@ namespace Oxide.Plugins
                 drone.hurtVelocityThreshold = (float)_vanillaHurtVelocityThreshold;
             }
 
-            Puts($"{drone.hurtVelocityThreshold}");
-
             var component = drone.GetComponent<DroneCollisionReplacer>();
             if (component == null)
                 return;
@@ -134,7 +141,13 @@ namespace Oxide.Plugins
                     return;
 
                 var damage = magnitude * _pluginConfig.CollisionDamageMultiplier;
-                baseEntity.Hurt(damage, DamageType.Collision);
+
+                // If DroneSettings is not loaded, it's probably safe to assume that drones are using default protection properties.
+                // Default protection properties make a drone immune to collision damage, so bypass protection.
+                // Without this bypass, using this plugin standalone would make drones immune to collision which is not desirable.
+                var useProtection = _pluginInstance.DroneSettings != null;
+                baseEntity.Hurt(damage, DamageType.Collision, useProtection: useProtection);
+
                 Interface.CallHook("OnDroneCollisionImpact", baseEntity, collision);
                 _nextDamageTime = Time.time + _pluginConfig.MinTimeBetweenImpacts;
             }
@@ -250,8 +263,9 @@ namespace Oxide.Plugins
                     SaveConfig();
                 }
             }
-            catch
+            catch (Exception e)
             {
+                LogError(e.Message);
                 LogWarning($"Configuration file {Name}.json is invalid; using defaults");
                 LoadDefaultConfig();
             }
