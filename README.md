@@ -1,6 +1,6 @@
 ## Features
 
-- Overhauls drone collision damage so it's more intuitive
+- Overhauls RC drone collision damage so it's more intuitive
 - Avoids collision damage when landing the drone
 
 ## Configuration
@@ -19,7 +19,7 @@ Default configuration:
   - When the collision velocity is lower than this amount, the collision is ignored and no damage is applied.
 - `MinTimeBetweenImpacts` -- Minimum time in seconds between drone collision impacts.
   - If the drone collides multiple times in this time frame above the velocity threshold, only the first collision will count. This mechanic is very useful for larger drones since it prevents them from taking unreasonable damage when colliding with multiple objects at once.
-- `CollisionDamageMultiplier` -- Damage multiplier to apply to eadch collision impact above the velocity threshold.
+- `CollisionDamageMultiplier` -- Damage multiplier to apply to each collision impact above the velocity threshold.
   - When using a value of `1.0`, the damage dealt will match the collision velocity.
 
 ## FAQ
