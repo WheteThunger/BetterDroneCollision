@@ -10,7 +10,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("Better Drone Collision", "WhiteThunder", "1.0.0")]
+    [Info("Better Drone Collision", "WhiteThunder", "1.0.1")]
     [Description("Overhauls drone collision damage so it's more intuitive.")]
     internal class BetterDroneCollision : CovalencePlugin
     {
@@ -153,6 +153,9 @@ namespace Oxide.Plugins
 
                 // Avoid damage when landing.
                 if (Vector3.Dot(collision.relativeVelocity.normalized, _drone.transform.up) > 0.5f)
+                    return;
+
+                if (collision.gameObject.ToBaseEntity() is TimedExplosive)
                     return;
 
                 var damage = magnitude * _config.CollisionDamageMultiplier;
