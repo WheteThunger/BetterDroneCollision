@@ -1,6 +1,5 @@
 ﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using Newtonsoft.Json.Serialization;
 using Oxide.Core;
 using Oxide.Core.Plugins;
 using Rust;
@@ -17,14 +16,12 @@ namespace Oxide.Plugins
     {
         #region Fields
 
-        [PluginReference]
-        private Plugin DroneSettings;
-
-        private static BetterDroneCollision _pluginInstance;
-        private static Configuration _pluginConfig;
-
         private const float ReplacementHurtVelocityThreshold = float.MaxValue;
 
+        [PluginReference]
+        private readonly Plugin DroneSettings;
+
+        private Configuration _config;
         private float? _vanillaHurtVelocityThreshold;
 
         #endregion
@@ -33,8 +30,6 @@ namespace Oxide.Plugins
 
         private void Init()
         {
-            _pluginInstance = this;
-
             Unsubscribe(nameof(OnEntitySpawned));
         }
 
@@ -62,9 +57,6 @@ namespace Oxide.Plugins
 
                 ResetDrone(drone);
             }
-
-            _pluginConfig = null;
-            _pluginInstance = null;
         }
 
         private void OnEntitySpawned(Drone drone)
@@ -73,13 +65,17 @@ namespace Oxide.Plugins
                 return;
 
             if (_vanillaHurtVelocityThreshold == null)
+            {
                 _vanillaHurtVelocityThreshold = drone.hurtVelocityThreshold;
+            }
 
-            // Delay to give other plugins a moment to cache the drone id so they can block this.
+            var drone2 = drone;
             NextTick(() =>
             {
-                if (drone != null)
-                    TryReplaceDroneCollision(drone);
+                if (drone2 != null)
+                {
+                    TryReplaceDroneCollision(drone2);
+                }
             });
         }
 
@@ -89,19 +85,22 @@ namespace Oxide.Plugins
 
         private static bool DroneCollisionReplaceWasBlocked(Drone drone)
         {
-            object hookResult = Interface.CallHook("OnDroneCollisionReplace", drone);
+            var hookResult = Interface.CallHook("OnDroneCollisionReplace", drone);
             return hookResult is bool && (bool)hookResult == false;
         }
 
-        private static bool IsDroneEligible(Drone drone) => !(drone is DeliveryDrone);
+        private static bool IsDroneEligible(Drone drone)
+        {
+            return drone.skinID == 0 && !(drone is DeliveryDrone);
+        }
 
-        private static bool TryReplaceDroneCollision(Drone drone)
+        private bool TryReplaceDroneCollision(Drone drone)
         {
             if (DroneCollisionReplaceWasBlocked(drone))
                 return false;
 
             drone.hurtVelocityThreshold = ReplacementHurtVelocityThreshold;
-            drone.gameObject.AddComponent<DroneCollisionReplacer>();
+            DroneCollisionReplacer.AddToDrone(this, drone);
             return true;
         }
 
@@ -113,20 +112,32 @@ namespace Oxide.Plugins
                 drone.hurtVelocityThreshold = (float)_vanillaHurtVelocityThreshold;
             }
 
-            var component = drone.GetComponent<DroneCollisionReplacer>();
-            if (component == null)
-                return;
-
-            UnityEngine.Object.Destroy(component);
+            DroneCollisionReplacer.RemoveFromDrone(drone);
         }
 
         #endregion
 
         #region Collision Replacer
 
-        private class DroneCollisionReplacer : EntityComponent<Drone>
+        private class DroneCollisionReplacer : FacepunchBehaviour
         {
+            public static void AddToDrone(BetterDroneCollision plugin, Drone drone)
+            {
+                var component = drone.gameObject.AddComponent<DroneCollisionReplacer>();
+                component._plugin = plugin;
+                component._drone = drone;
+            }
+
+            public static void RemoveFromDrone(Drone drone)
+            {
+                Destroy(drone.gameObject.GetComponent<DroneCollisionReplacer>());
+            }
+
+            private BetterDroneCollision _plugin;
+            private Drone _drone;
             private float _nextDamageTime;
+
+            private Configuration _config => _plugin._config;
 
 	        private void OnCollisionEnter(Collision collision)
             {
@@ -137,23 +148,23 @@ namespace Oxide.Plugins
                     return;
 
                 var magnitude = collision.relativeVelocity.magnitude;
-                if (magnitude < _pluginConfig.MinCollisionVelocity)
+                if (magnitude < _config.MinCollisionVelocity)
                     return;
 
                 // Avoid damage when landing.
-                if (Vector3.Dot(collision.relativeVelocity.normalized, baseEntity.transform.up) > 0.5f)
+                if (Vector3.Dot(collision.relativeVelocity.normalized, _drone.transform.up) > 0.5f)
                     return;
 
-                var damage = magnitude * _pluginConfig.CollisionDamageMultiplier;
+                var damage = magnitude * _config.CollisionDamageMultiplier;
 
                 // If DroneSettings is not loaded, it's probably safe to assume that drones are using default protection properties.
                 // Default protection properties make a drone immune to collision damage, so bypass protection.
                 // Without this bypass, using this plugin standalone would make drones immune to collision which is not desirable.
-                var useProtection = _pluginInstance.DroneSettings != null;
-                baseEntity.Hurt(damage, DamageType.Collision, useProtection: useProtection);
+                var useProtection = _plugin.DroneSettings != null;
+                _drone.Hurt(damage, DamageType.Collision, useProtection: useProtection);
 
-                Interface.CallHook("OnDroneCollisionImpact", baseEntity, collision);
-                _nextDamageTime = Time.time + _pluginConfig.MinTimeBetweenImpacts;
+                Interface.CallHook("OnDroneCollisionImpact", _drone, collision);
+                _nextDamageTime = Time.time + _config.MinTimeBetweenImpacts;
             }
         }
 
@@ -161,7 +172,8 @@ namespace Oxide.Plugins
 
         #region Configuration
 
-        private class Configuration : SerializableConfiguration
+        [JsonObject(MemberSerialization.OptIn)]
+        private class Configuration : BaseConfiguration
         {
             [JsonProperty("MinCollisionVelocity")]
             public float MinCollisionVelocity = 3;
@@ -175,11 +187,9 @@ namespace Oxide.Plugins
 
         private Configuration GetDefaultConfig() => new Configuration();
 
-        #endregion
+        #region Configuration Helpers
 
-        #region Configuration Boilerplate
-
-        private class SerializableConfiguration
+        private class BaseConfiguration
         {
             public string ToJson() => JsonConvert.SerializeObject(this);
 
@@ -208,7 +218,7 @@ namespace Oxide.Plugins
             }
         }
 
-        private bool MaybeUpdateConfig(SerializableConfiguration config)
+        private bool MaybeUpdateConfig(BaseConfiguration config)
         {
             var currentWithDefaults = config.ToDictionary();
             var currentRaw = Config.ToDictionary(x => x.Key, x => x.Value);
@@ -217,7 +227,7 @@ namespace Oxide.Plugins
 
         private bool MaybeUpdateConfigDict(Dictionary<string, object> currentWithDefaults, Dictionary<string, object> currentRaw)
         {
-            bool changed = false;
+            var changed = false;
 
             foreach (var key in currentWithDefaults.Keys)
             {
@@ -248,20 +258,20 @@ namespace Oxide.Plugins
             return changed;
         }
 
-        protected override void LoadDefaultConfig() => _pluginConfig = GetDefaultConfig();
+        protected override void LoadDefaultConfig() => _config = GetDefaultConfig();
 
         protected override void LoadConfig()
         {
             base.LoadConfig();
             try
             {
-                _pluginConfig = Config.ReadObject<Configuration>();
-                if (_pluginConfig == null)
+                _config = Config.ReadObject<Configuration>();
+                if (_config == null)
                 {
                     throw new JsonException();
                 }
 
-                if (MaybeUpdateConfig(_pluginConfig))
+                if (MaybeUpdateConfig(_config))
                 {
                     LogWarning("Configuration appears to be outdated; updating and saving");
                     SaveConfig();
@@ -278,8 +288,10 @@ namespace Oxide.Plugins
         protected override void SaveConfig()
         {
             Log($"Configuration changes saved to {Name}.json");
-            Config.WriteObject(_pluginConfig, true);
+            Config.WriteObject(_config, true);
         }
+
+        #endregion
 
         #endregion
     }
