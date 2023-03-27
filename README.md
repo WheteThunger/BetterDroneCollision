@@ -45,7 +45,7 @@ Drone attachments:
 #### OnDroneCollisionReplace
 
 ```csharp
-bool? OnDroneCollisionReplace(Drone drone)
+object OnDroneCollisionReplace(Drone drone)
 ```
 
 - Called when this plugin is about to alter a drone to replace its collision behavior
