@@ -2,6 +2,8 @@
 
 - Overhauls RC drone collision damage so it's more intuitive
 - Avoids collision damage when landing the drone
+- Avoids collision damage with dropped items and timed explosives
+- Prevents drone automatic descent when colliding with dropped items
 
 ## Configuration
 
