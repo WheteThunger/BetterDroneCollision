@@ -65,10 +65,7 @@ namespace Oxide.Plugins
             if (!IsDroneEligible(drone))
                 return;
 
-            if (_vanillaHurtVelocityThreshold == null)
-            {
-                _vanillaHurtVelocityThreshold = drone.hurtVelocityThreshold;
-            }
+            _vanillaHurtVelocityThreshold ??= drone.hurtVelocityThreshold;
 
             var drone2 = drone;
             NextTick(() =>
@@ -86,13 +83,12 @@ namespace Oxide.Plugins
 
         private static bool DroneCollisionReplaceWasBlocked(Drone drone)
         {
-            var hookResult = Interface.CallHook("OnDroneCollisionReplace", drone);
-            return hookResult is bool && (bool)hookResult == false;
+            return Interface.CallHook("OnDroneCollisionReplace", drone) is false;
         }
 
         private static bool IsDroneEligible(Drone drone)
         {
-            return drone.skinID == 0 && !(drone is DeliveryDrone);
+            return drone.skinID == 0 && drone is not DeliveryDrone;
         }
 
         private bool TryReplaceDroneCollision(Drone drone)
@@ -207,7 +203,7 @@ namespace Oxide.Plugins
             public float CollisionDamageMultiplier = 1;
         }
 
-        private Configuration GetDefaultConfig() => new Configuration();
+        private Configuration GetDefaultConfig() => new();
 
         #region Configuration Helpers
 
@@ -253,13 +249,10 @@ namespace Oxide.Plugins
 
             foreach (var key in currentWithDefaults.Keys)
             {
-                object currentRawValue;
-                if (currentRaw.TryGetValue(key, out currentRawValue))
+                if (currentRaw.TryGetValue(key, out var currentRawValue))
                 {
-                    var defaultDictValue = currentWithDefaults[key] as Dictionary<string, object>;
                     var currentDictValue = currentRawValue as Dictionary<string, object>;
-
-                    if (defaultDictValue != null)
+                    if (currentWithDefaults[key] is Dictionary<string, object> defaultDictValue)
                     {
                         if (currentDictValue == null)
                         {
@@ -267,7 +260,9 @@ namespace Oxide.Plugins
                             changed = true;
                         }
                         else if (MaybeUpdateConfigDict(defaultDictValue, currentDictValue))
+                        {
                             changed = true;
+                        }
                     }
                 }
                 else
