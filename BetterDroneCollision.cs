@@ -6,11 +6,12 @@ using Rust;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Network;
 using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("Better Drone Collision", "WhiteThunder", "1.0.1")]
+    [Info("Better Drone Collision", "WhiteThunder", "1.1.0")]
     [Description("Overhauls drone collision damage so it's more intuitive.")]
     internal class BetterDroneCollision : CovalencePlugin
     {
@@ -155,8 +156,26 @@ namespace Oxide.Plugins
                 if (Vector3.Dot(collision.relativeVelocity.normalized, _drone.transform.up) > 0.5f)
                     return;
 
-                if (collision.gameObject.ToBaseEntity() is TimedExplosive)
+                var otherEntity = collision.gameObject.ToBaseEntity();
+                if (otherEntity is TimedExplosive)
                     return;
+
+                if (otherEntity is DroppedItem)
+                {
+                    for (var i = 0; i < collision.contactCount; i++)
+                    {
+                        var contact = collision.GetContact(i);
+                        Physics.IgnoreCollision(contact.thisCollider, contact.otherCollider);
+                    }
+
+                    // If the drone just had a collision, assume it was triggered by the Dropped Item and re-enable the drone.
+                    if (Math.Abs(_drone.lastCollision - TimeEx.currentTimestamp) < 0.001f)
+                    {
+                        _drone.lastCollision = 0;
+                    }
+
+                    return;
+                }
 
                 var damage = magnitude * _config.CollisionDamageMultiplier;
 
